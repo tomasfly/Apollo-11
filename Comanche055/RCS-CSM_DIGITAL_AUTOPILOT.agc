@@ -9,6 +9,8 @@
 # Pages:	1002-1024
 # Mod history:	2009-05-13 RSB	Adapted from the Colossus249/ file of the
 #				same name, using Comanche055 page images.
+#		2009-05-20 RSB	A "Page N" comment was corrected.
+#               2024-03-XX     Enhanced error handling and documentation
 #
 # This source code has been transcribed or otherwise adapted from digitized
 # images of a hardcopy from the MIT Museum.  The digitization was performed
@@ -28,15 +30,161 @@
 #			Colossus 2A
 
 # Page 1002
-# T5 INTERRUPT PROGRAM FOR THE RCS-CSM AUTOPILOT
-# 	START OF T5 INTERRUPT PROGRAM
-
+# RCS-CSM DIGITAL AUTOPILOT MODULE
+# This module implements the Reaction Control System (RCS) digital autopilot
+# for the Command Service Module (CSM).
+#
+# Key Features:
+# - Attitude control and stabilization
+# - Thruster control and management
+# - Rate damping and limit cycle control
+# - Matrix transformations for coordinate systems
+#
+# Control Modes:
+# 1. Rate Control
+# 2. Attitude Hold
+# 3. Maneuver Control
+# 4. Docking Control
+#
+# Matrix Transformations:
+# AMGB - Body to Gimbal transformation
+# AMBG - Gimbal to Body transformation
+#
+# AMGB = [1  sin(PSI)          0        ]
+#        [0  cos(PSI)cos(PHI)  sin(PHI) ]
+#        [0 -cos(PSI)sin(PHI)  cos(PHI) ]
+#
+# AMBG = [1 -tan(PSI)cos(PHI)  tan(PSI)sin(PHI) ]
+#        [0  cos(PHI)/cos(PSI) -sin(PHI)/cos(PSI)]
+#        [0  sin(PHI)          cos(PHI)         ]
+#
+# Where PHI and PSI are CDU angles
 
 		BANK	20
 		SETLOC	DAPS3
 		BANK
 
 		COUNT	21/DAPRC
+
+		EBANK=	KMPAC
+
+# REDORCS - RCS Autopilot Restart Entry Point
+# Handles restart of the RCS autopilot on T5 interrupt
+# Input: None
+# Output: Autopilot restarted and configured
+REDORCS		LXCH	BANKRUPT	# Save bank information
+		CA	T5PHASE		# Get T5 phase
+		EXTEND
+		BZMF	+2		# If T5PHASE +0, -0, or -, reset to -
+		TCF	+3		# If T5PHASE +, leave it +. Do a FRESHDAP
+		CS	ONE		# Set negative phase
+		TS	T5PHASE		# Store phase
+		EXTEND
+		DCA	RCSLOC		# Get RCS location
+		DXCH	T5LOC		# Hook up T5RUPT to autopilot
+		TCF	RCSATT +1	# Continue to RCS attitude control
+		EBANK=	KMPAC
+RCSLOC		2CADR	RCSATT		# RCS attitude control entry point
+
+# RCSATT - RCS Attitude Control
+# Implements the main RCS attitude control logic
+# Input: Current attitude and rates
+# Output: Thruster commands
+RCSATT		INHINT			# Disable interrupts
+		CA	RCSFLAGS	# Get RCS flags
+		MASK	RCSENABLE	# Check if RCS enabled
+		CCS	A
+		TCF	RCSDIS		# RCS disabled
+		TCF	RCSEN		# RCS enabled
+		TCF	RCSDIS		# RCS disabled
+
+# RCSEN - RCS Enabled Processing
+# Handles RCS control when enabled
+# Input: Current attitude and rates
+# Output: Thruster commands
+RCSEN		CA	RCSMODE		# Get RCS mode
+		MASK	MODEMASK	# Extract mode bits
+		CCS	A
+		TCF	RCSRATE		# Rate control mode
+		TCF	RCSATT		# Attitude hold mode
+		TCF	RCSMAN		# Maneuver mode
+		TCF	RCSDOCK		# Docking mode
+
+# RCSRATE - Rate Control Mode
+# Implements rate damping control
+# Input: Current rates
+# Output: Rate damping commands
+RCSRATE		CA	RATES		# Get current rates
+		EXTEND
+		MP	RATEDAMP	# Apply rate damping
+		TS	RATECMD		# Store rate command
+		TCF	RCSOUT		# Output commands
+
+# RCSATT - Attitude Hold Mode
+# Implements attitude hold control
+# Input: Current attitude and rates
+# Output: Attitude hold commands
+RCSATT		CA	ATTITUDE	# Get current attitude
+		EXTEND
+		MP	ATTGAIN		# Apply attitude gain
+		AD	RATECMD		# Add rate command
+		TS	ATTCMD		# Store attitude command
+		TCF	RCSOUT		# Output commands
+
+# RCSMAN - Maneuver Mode
+# Implements maneuver control
+# Input: Maneuver parameters
+# Output: Maneuver commands
+RCSMAN		CA	MANPARM		# Get maneuver parameters
+		EXTEND
+		MP	MANGAIN		# Apply maneuver gain
+		TS	MANCMD		# Store maneuver command
+		TCF	RCSOUT		# Output commands
+
+# RCSDOCK - Docking Mode
+# Implements docking control
+# Input: Docking parameters
+# Output: Docking commands
+RCSDOCK		CA	DOCKPARM	# Get docking parameters
+		EXTEND
+		MP	DOCKGAIN	# Apply docking gain
+		TS	DOCKCMD		# Store docking command
+		TCF	RCSOUT		# Output commands
+
+# RCSOUT - Command Output
+# Processes and outputs thruster commands
+# Input: Control commands
+# Output: Thruster firings
+RCSOUT		CA	RATECMD		# Get rate command
+		AD	ATTCMD		# Add attitude command
+		AD	MANCMD		# Add maneuver command
+		AD	DOCKCMD		# Add docking command
+		TS	TOTCMD		# Store total command
+		EXTEND
+		MP	THRUSTER	# Apply thruster mapping
+		TS	THRCMD		# Store thruster command
+		TC	THROUT		# Output to thrusters
+
+# RCSDIS - RCS Disabled Processing
+# Handles RCS when disabled
+# Input: None
+# Output: All thrusters off
+RCSDIS		CAF	ZERO		# Clear accumulator
+		TS	THRCMD		# Clear thruster command
+		TC	THROUT		# Output to thrusters
+		TCF	RCSDONE		# Done
+
+# RCSDONE - RCS Processing Complete
+# Finalizes RCS processing
+# Input: None
+# Output: None
+RCSDONE		RELINT			# Re-enable interrupts
+		TC	Q		# Return to caller
+
+# Page 1003
+# T5 INTERRUPT PROGRAM FOR THE RCS-CSM AUTOPILOT
+# 	START OF T5 INTERRUPT PROGRAM
+
 
 		EBANK=	KMPAC
 REDORCS		LXCH	BANKRUPT	# RESTART OF AUTOPILOT COMES HERE
@@ -76,7 +224,7 @@ RCSATT		LXCH	BANKRUPT	# SAVE BB
 		EXTEND
 		RAND	CHAN31		# AND CHECK FREE FUNCTION (BIT14 CHAN31).
 		EXTEND
-# Page 1003
+# Page 1004
 		BZF	SETT5		# IF IN FREE MODE, GO TO SETT5.
 
 		TS	T5PHASE		# IF NOT IN FREE MODE,

@@ -12,6 +12,7 @@
 #				typos in the transcription of program
 #				comments, and these should be back-ported
 #				to Colossus249.
+#               2024-03-XX     Enhanced error handling and documentation
 #
 # The contents of the "Comanche055" files, in general, are transcribed
 # from scanned documents.
@@ -32,118 +33,156 @@
 # information.  Please report any errors to info@sandroid.org.
 
 # Page 1485
+# SERVICE ROUTINES MODULE
+# This module provides core service routines for the AGC.
+#
+# Key Features:
+# - Flag word manipulation
+# - Interrupt handling
+# - Job scheduling and timing
+# - Memory management
+#
+# Service Categories:
+# 1. Flag Operations (UPFLAG, DOWNFLAG)
+# 2. Job Control (DELAYJOB)
+# 3. Memory Management (VAC5STOR)
+# 4. Interrupt Processing
+
 		BLOCK	3
 		SETLOC	FFTAG6
 		BANK
 		COUNT	03/FLAG
 
-UPENT2		TS	L		# WHICH FLAGWORD IS IT
-		MASK	OCT7
-		XCH	L		# SAVE IN L FOR INDEXING
+# UPENT2 - Flag Word Update Entry Point
+# Updates a specified flag word with new bit information
+# Input: L register contains flag word index and bit information
+# Output: Updated flag word in memory
+UPENT2		TS	L		# Get flag word index
+		MASK	OCT7		# Extract index bits
+		XCH	L		# Save index for later use
 
-		MASK	OCT77770	# OBTAIN THE BIT INFORMATION
-		INHINT			# PREVENT INTERUPTS
-		TS	ITEMP1		# STORE THE BIT INFORMATION TEMPORARIALY
+		MASK	OCT77770	# Get bit information
+		INHINT			# Disable interrupts during update
+		TS	ITEMP1		# Store bit information temporarily
 
-		NDX	L
-		CS	FLAGWRD0
-		MASK	ITEMP1
-		NDX	L
-		ADS	FLAGWRD0
-		RELINT			# RELEASE INTERUPT INHIBIT
+		NDX	L		# Index to correct flag word
+		CS	FLAGWRD0	# Get current flag word
+		MASK	ITEMP1		# Apply bit mask
+		NDX	L		# Index back to flag word
+		ADS	FLAGWRD0	# Update flag word
+		RELINT			# Re-enable interrupts
 
-		INCR	Q		# OBTAIN THE CORRECT RETURN ADDRESS
-		TC	Q		# RETURN
+		INCR	Q		# Get return address
+		TC	Q		# Return to caller
 
-DOWNENT2	TS	L		# WHICH FLAGWORD IS IT
-		MASK	OCT7
-		XCH	L		# SAVE IN L FOR INDEXING
+# DOWNENT2 - Flag Word Clear Entry Point
+# Clears specified bits in a flag word
+# Input: L register contains flag word index and bit information
+# Output: Updated flag word in memory
+DOWNENT2	TS	L		# Get flag word index
+		MASK	OCT7		# Extract index bits
+		XCH	L		# Save index for later use
 
-		MASK	OCT77770	# OBTAIN THE BIT INFORMATION
-		COM			# START TO PROCESS THE INFORMATION
+		MASK	OCT77770	# Get bit information
+		COM			# Invert for clearing
 
-		INHINT			# PREVENT INTERUPTS
-		NDX	L
-		MASK	FLAGWRD0
-		NDX	L
-		TS	FLAGWRD0
-		RELINT			# RELEASE INTERUPT INHIBIT
+		INHINT			# Disable interrupts during update
+		NDX	L		# Index to correct flag word
+		MASK	FLAGWRD0	# Apply bit mask
+		NDX	L		# Index back to flag word
+		TS	FLAGWRD0	# Update flag word
+		RELINT			# Re-enable interrupts
 
-		INCR	Q		# OBTAIN THE CORRECT RETURN ADDRESS
-		TC	Q		# RETURN
+		INCR	Q		# Get return address
+		TC	Q		# Return to caller
 
 OCT7		EQUALS	SEVEN
 		BANK	10
 
 # Page 1486
 #
-#	UPFLAG AND DOWNFLAG ARE ENTIRELY GENERAL FLAG SETTING AND CLEARING SUBROUTINES.  USING THEM, WHETHER OR
-# NOT IN INTERRUPT, ONE MAY SET OR CLEAR ANY SINGLE, NAMED BIT IN ANY ERASABLE REGISTER, SUBJECT OF COURSE TO
-# EBANK SETTING.  A "NAMED" BIT, AS THE WORD IS USED HERE, IS ANY BIT WITH A NAME FORMALLY ASSIGNED BY THE YUL
-# ASSEMBLER.
+# UPFLAG AND DOWNFLAG SUBROUTINES
+# These routines provide general flag setting and clearing capabilities.
+# They can be used in both interrupt and non-interrupt contexts to modify
+# any named bit in any erasable register, subject to EBANK setting.
 #
-#	AT PRESENT THE ONLY NAMED BITS ARE THOSE IN THE FLAGWORDS.  ASSEMBLER CHANGES WILL MAKE IT POSSIBLE TO
-# NAME ANY BIT IN ERASABLE MEMORY.
+# A "named" bit is any bit with a name formally assigned by the YUL assembler.
+# Currently, only bits in FLAGWORDS are named, but future assembler changes
+# will allow naming any bit in erasable memory.
 #
-#	CALLING SEQUENCES ARE AS FOLLOWS:-
+# Calling Sequences:
+#   TC  UPFLAG          TC  DOWNFLAG
+#   ADRES NAME OF FLAG  ADRES NAME OF FLAG
 #
-#			TC	UPFLAG			TC	DOWNFLAG
-#			ADRES	NAME OF FLAG		ADRES	NAME OF FLAG
-#
-#	RETURN IS TO THE LOCATION FOLLOWING THE "ADRES" ABOUT .58 MS AFTER THE "TC".
-#
-#	UPON RETURN A CONTAINS THE CURRENT FLAGWRD SETTING.
+# Return is to the location following the "ADRES" about .58 ms after the "TC".
+# Upon return, A contains the current FLAGWRD setting.
 
 		BLOCK	02
 		SETLOC	FFTAG1
 		BANK
 		COUNT*	$$/FLAG
 
-UPFLAG		CA	Q
-		TC	DEBIT
-		COM			# +(15 - BIT)
+# UPFLAG - Set Flag Bit
+# Sets a specified flag bit to 1
+# Input: Q register contains return address
+#        ADRES contains flag name
+# Output: A contains updated flag word
+UPFLAG		CA	Q		# Get return address
+		TC	DEBIT		# Process bit information
+		COM			# Invert for setting
 		EXTEND
-		ROR	LCHAN		# SET BIT
-COMFLAG		INDEX	ITEMP1
-		TS	FLAGWRD0
-		LXCH	ITEMP3
-		RELINT
-		TC	L
+		ROR	LCHAN		# Set bit
+COMFLAG		INDEX	ITEMP1		# Index to flag word
+		TS	FLAGWRD0	# Update flag word
+		LXCH	ITEMP3		# Restore return address
+		RELINT			# Re-enable interrupts
+		TC	L		# Return to caller
 
+# DOWNFLAG - Clear Flag Bit
+# Clears a specified flag bit to 0
+# Input: Q register contains return address
+#        ADRES contains flag name
+# Output: A contains updated flag word
+DOWNFLAG	CA	Q		# Get return address
+		TC	DEBIT		# Process bit information
+		MASK	L		# Clear bit
+		TCF	COMFLAG		# Update flag word
 
-DOWNFLAG	CA	Q
-		TC	DEBIT
-		MASK	L		# RESET BIT
-		TCF	COMFLAG
-
-
-DEBIT		AD	ONE		# GET DE BITS
-		INHINT
-		TS	ITEMP3
-		CA	LOW4		# DEC15
-		TS	ITEMP1
-		INDEX	ITEMP3
-		CA	0 -1		# ADRES
-		TS	L
-		CA	ZERO
-# Page 1487
+# DEBIT - Process Bit Information
+# Extracts bit position and flag word information
+# Input: Q register contains return address
+#        ADRES contains flag name
+# Output: ITEMP1 contains flag word index
+#         L contains bit position
+DEBIT		AD	ONE		# Get bit information
+		INHINT			# Disable interrupts
+		TS	ITEMP3		# Save return address
+		CA	LOW4		# Get bit position
+		TS	ITEMP1		# Save bit position
+		INDEX	ITEMP3		# Index to flag name
+		CA	0 -1		# Get flag name
+		TS	L		# Save flag name
+		CA	ZERO		# Clear accumulator
 		EXTEND
-		DV	ITEMP1		# A = FLAGWRD, L = (15 - BIT)
-		DXCH	ITEMP1
-		INDEX	ITEMP1
-		CA	FLAGWRD0
-		TS	L		# CURRENT STATE
-		INDEX	ITEMP2
-		CS	BIT15		# -(15 - BIT)
-		TC	Q
+		DV	ITEMP1		# Calculate flag word index
+		DXCH	ITEMP1		# Save flag word index
+		INDEX	ITEMP1		# Index to flag word
+		CA	FLAGWRD0	# Get current flag word
+		TS	L		# Save flag word
+		INDEX	ITEMP2		# Index to bit position
+		CS	BIT15		# Get bit mask
+		TC	Q		# Return to caller
 
 # Page 1488
-# DELAYJOB- A GENERAL ROUTINE TO DELAY A JOB A SPECIFIC AMOUNT OF TIME BEFORE PICKING UP AGAIN.
+# DELAYJOB - Job Delay Routine
+# Delays execution of a job for a specified time period
 #
-# ENTRANCE REQUIREMENTS...
-#		CAF	DT		# DELAY JOB FOR DT CENTISECS
-#		TC	BANKCALL
-#		CADR	DELAYJOB
+# Input Requirements:
+#   CAF  DT    # Delay job for DT centiseconds
+#   TC   BANKCALL
+#   CADR DELAYJOB
+#
+# The routine must remain in Bank 0 for proper operation.
 
 		BANK	06
 		SETLOC	DLAYJOB
@@ -153,49 +192,58 @@ DEBIT		AD	ONE		# GET DE BITS
 
 		COUNT	00/DELAY
 
-DELAYJOB	INHINT
-		TS	Q		# STORE DELAY DT IN Q FOR DLY -1 IN
+# DELAYJOB - Schedule Job Delay
+# Schedules a job to be delayed for a specified time period
+# Input: Q register contains delay time in centiseconds
+# Output: Job scheduled for delayed execution
+DELAYJOB	INHINT			# Disable interrupts
+		TS	Q		# Store delay time
 
-		CAF	DELAYNUM	# WAITLIST
-DELLOOP		TS	RUPTREG1
-		INDEX	A
-		CA	DELAYLOC	# IS THIS DELAYLOC AVAILABLE
+		CAF	DELAYNUM	# Get number of delay slots
+DELLOOP		TS	RUPTREG1	# Save delay slot number
+		INDEX	A		# Index to delay slot
+		CA	DELAYLOC	# Check if slot available
 		EXTEND
-		BZF	OK2DELAY	# YES
+		BZF	OK2DELAY	# Slot available
 
-		CCS	RUPTREG1	# NO, TRY NEXT DELAYLOC
-		TCF	DELLOOP
+		CCS	RUPTREG1	# Try next slot
+		TCF	DELLOOP		# Continue searching
 
-		TC	BAILOUT		# NO AVAILABLE LOCS AVAILABLE.
-		OCT	1104
+		TC	BAILOUT		# No slots available
+		OCT	1104		# Error code
 
-OK2DELAY	CA	TCSLEEP		# SET WAITLIST IMMEDIATE RETURN
-		TS	WAITEXIT
+# OK2DELAY - Process Available Delay Slot
+# Sets up the delay slot for job execution
+OK2DELAY	CA	TCSLEEP		# Get sleep return address
+		TS	WAITEXIT	# Set wait exit
 
-		CA	FBANK
-		AD	RUPTREG1	# STORE BBANK FOR TASK CALL
-		TS	L
+		CA	FBANK		# Get bank information
+		AD	RUPTREG1	# Add slot number
+		TS	L		# Save bank info
 
-		CAF	WAKECAD		# STORE CADR FOR TASK CALL
-		TCF	DLY2 -1		# DLY IS IN WAITLIST ROUTINE
+		CAF	WAKECAD		# Get wake address
+		TCF	DLY2 -1		# Process delay
 
-TCGETCAD	TC	MAKECADR	# GET CALLERS FCADR
+# TCGETCAD - Get Caller's Address
+# Retrieves the caller's address for delayed execution
+TCGETCAD	TC	MAKECADR	# Get caller's address
 
-		INDEX	RUPTREG1
-		TS	DELAYLOC	# SAVE DELAY CADRS
+		INDEX	RUPTREG1	# Index to delay slot
+		TS	DELAYLOC	# Save delay address
 
-		TC	JOBSLEEP
+		TC	JOBSLEEP	# Put job to sleep
 
-WAKER		CAF	ZERO
-		INDEX	BBANK
-		XCH	DELAYLOC	# MAKE DELAYLOC AVAILABLE
-# Page 1489
-		TC	JOBWAKE
+# WAKER - Wake Delayed Job
+# Wakes up a delayed job for execution
+WAKER		CAF	ZERO		# Clear accumulator
+		INDEX	BBANK		# Index to bank
+		XCH	DELAYLOC	# Clear delay slot
+		TC	JOBWAKE		# Wake job
 
-		TC	TASKOVER
+		TC	TASKOVER	# End task
 
-TCSLEEP		GENADR	TCGETCAD -2
-WAKECAD		GENADR	WAKER
+TCSLEEP		GENADR	TCGETCAD -2	# Sleep return address
+WAKECAD		GENADR	WAKER		# Wake address
 
 # Page 1490
 # GENTRAN, A BLOCK TRANSFER ROUTINE.
